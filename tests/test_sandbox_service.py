@@ -43,6 +43,30 @@ def test_assertion_failure_classification_rejects_setup_errors():
     assert not SandboxVerificationService._is_assertion_failure("collected 0 items")
 
 
+def test_windows_docker_pipe_connection_error_is_sandbox_unavailable(tmp_path, monkeypatch):
+    from backend.services import sandbox_service
+
+    monkeypatch.setattr(sandbox_service.shutil, "which", lambda _: "/usr/bin/docker")
+    output = (
+        "failed to connect to the docker API at "
+        "npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct "
+        "and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: "
+        "The system cannot find the file specified."
+    )
+
+    def run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, "", output)
+
+    monkeypatch.setattr(sandbox_service.subprocess, "run", run)
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+
+    result = SandboxVerificationService()._run_pytest(workspace, None)
+
+    assert result["status"] == "sandbox_unavailable"
+    assert "dockerDesktopLinuxEngine" in result["output"]
+
+
 def test_shared_sandbox_volume_mount_is_scoped_to_one_workspace(tmp_path, monkeypatch):
     from backend.services import sandbox_service
 

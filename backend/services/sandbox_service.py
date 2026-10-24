@@ -185,11 +185,30 @@ class SandboxVerificationService:
         except subprocess.TimeoutExpired as exc:
             return {"status": "timeout", "returncode": -1, "output": ((exc.stdout or "") + "\n" + (exc.stderr or "") + "\nSandbox execution timed out.")[-8000:]}
         output = (result.stdout or "") + "\n" + (result.stderr or "")
-        if "Unable to find image" in output or "pull access denied" in output or "Cannot connect to the Docker daemon" in output or "permission denied while trying to connect to the Docker daemon" in output:
+        if (
+            "unable to find image" in output.lower()
+            or "pull access denied" in output.lower()
+            or SandboxVerificationService._is_docker_unavailable(output)
+        ):
             return {"status": "sandbox_unavailable", "returncode": result.returncode, "output": output[-8000:]}
         if "No module named pytest" in output or "No module named 'pytest'" in output:
             return {"status": "sandbox_setup_error", "returncode": result.returncode, "output": output[-8000:]}
         return {"status": "completed", "returncode": result.returncode, "output": output[-12000:]}
+
+    @staticmethod
+    def _is_docker_unavailable(output: str) -> bool:
+        lower = output.lower()
+        return any(
+            marker in lower
+            for marker in (
+                "cannot connect to the docker daemon",
+                "permission denied while trying to connect to the docker daemon",
+                "failed to connect to the docker api",
+                "failed to connect to the docker daemon",
+                "error during connect",
+                "dockerdesktoplinuxengine",
+            )
+        )
 
     @staticmethod
     def _safe_test_path(value: str) -> str | None:
